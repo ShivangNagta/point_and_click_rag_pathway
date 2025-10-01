@@ -125,3 +125,5 @@ xyzservices==2025.4.0
 yarl==1.20.1
 zipp==3.23.0
 google-genai
+faiss-cpu=1.12.0
+sentence-transformers=5.1.1
