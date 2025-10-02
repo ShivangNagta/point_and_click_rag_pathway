@@ -1,9 +1,15 @@
-from db.utils import save_text_to_file
-from db.pathway_pipeline import auto_update_vec_db_async
-from db.query import query_vector_db
-from agent.agent_utils import screenshot_to_text, get_user_response
+from src.db.utils import save_text_to_file
+from src.db.pathway_pipeline import auto_update_vec_db_async
+from src.db.query import query_vector_db
+from src.agent.agent_utils import screenshot_to_text, get_user_response
+import os
+from dotenv import load_dotenv
 
 PATH_TO_TEXTS_ON_CLICK = "captured_texts.txt"
+
+load_dotenv()
+
+API = os.getenv('GEMINI_KEY')
 
 if __name__ == "__main__":
     # Update Vector database in background asynchrounously whenever new information available
@@ -33,7 +39,7 @@ if __name__ == "__main__":
             query_text = f"""User Query: {user_query}
                              If user mentions anything about the current state of the game then the textual information of the game's screenshot is here as follows: {screenshot_information}
             """
-            chunks_in_json = query_vector_db(query_text, k=10)
+            chunks_in_json = query_vector_db(query_text, top_k=10)
             user_reponse = get_user_response(user_query, "RELEVANT CHAT", "screenshot", chunks_in_json, "API_KEY")
 
             # Update GUI

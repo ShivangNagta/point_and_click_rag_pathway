@@ -6,5 +6,3 @@ def save_text_to_file(text: str, file_path: str = "captured_texts.txt"):
     with open(file_path, "a", encoding="utf-8") as f:
         f.write(text.strip() + "\n---END---\n")
     return file_path
-
-
