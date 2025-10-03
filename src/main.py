@@ -1,18 +1,29 @@
 from src.file.create import save_text_to_file
 from src.agent.agent_utils import screenshot_to_text, get_user_response
 from src.client_functions.endpoints import answer, summarize, retrieve, list_documents, statistics, health_check, search_documents, ask_with_context
+from src.chat.manage import format_history, add_to_chat_history, chat_history
 import os
 from dotenv import load_dotenv
 
 CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(CURRENT_FILE_DIR, ".."))
 LIVE_DIR = os.path.join(ROOT_DIR, "pathway", "data")
+IMG = f"{ROOT_DIR}/before.png"
 
 load_dotenv()
 
+API = os.getenv("GEMINI_KEY")
+
 if __name__ == "__main__":
 
-    save_text_to_file("hello hello kanwar", live_directory=LIVE_DIR)
+    while(True):
+        print(chat_history)
+        user_text = input()
+        formatted_history = format_history(chat_history)
+        res = get_user_response(user_text, formatted_history, IMG, [], API)
+        print(res)
+        add_to_chat_history(user_text, res)
+
 
     # # App loop for Kanwar paaji
     # while (True):
