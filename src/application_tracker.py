@@ -14,14 +14,28 @@ import pygetwindow as gw
 from pynput import mouse
 from PIL import ImageGrab, ImageDraw, Image
 
-from utils import click_in_bounds
+from file.create import save_text_to_file
+from agent.agent_utils import screenshot_to_text, get_user_response
+from client_functions.endpoints import answer, summarize, retrieve, list_documents, statistics, health_check, search_documents, ask_with_context
+from chat.manage import format_history, add_to_chat_history, chat_history
 
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
+load_dotenv()
+
+CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(CURRENT_FILE_DIR, ".."))
+LIVE_DIR = os.path.join(ROOT_DIR, "pathway", "data")
+PATHWAY_DIR = os.path.join(ROOT_DIR, "pathway")
+os.makedirs(LIVE_DIR, exist_ok=True)
+API = os.getenv("GEMINI_API_KEY")
+K = int(os.getenv("K", 3))
 
 SCREENSHOT_FOLDER = "./screenshots"
 SCREENSHOT_TIMER_SEC = 0.75
 MARKER_RADIUS = 15
+
+def click_in_bounds(x, y, window) -> bool:
+    return (0 <= x and x <= window.width) and (0 <= y and y <= window.height)
 
 class AppSelectionDialog(QDialog):
     def __init__(self, parent=None):
@@ -134,22 +148,6 @@ class ChatAndTrackerWindow(QWidget):
         self.log_display.append(f"[{timestamp}] {log_text}")
 
     # Chat Methods
-    async def get_llm_response(self, user_message, list_of_paths, api):
-        try:
-            # TODO: Replace this with your actual LLM API call
-            # Also use self.latest_ss and self.chat_history as context
-            return ""
-        except Exception as e:
-            self.log_signal.emit(f"Error getting LLM response: {e}")
-            return "Sorry, I encountered an error processing your request."
-
-    def process_llm_response(self, user_message, list_of_paths, api):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(self.get_llm_response(user_message, list_of_paths, api))
-        loop.close()
-        return response
-
     def send_message(self):
         user_message = self.message_input.text().strip()
         if not user_message: return
@@ -160,25 +158,23 @@ class ChatAndTrackerWindow(QWidget):
         self.show_message("Thinking...", is_user=False)
         self.message_input.clear()
 
-        with ThreadPoolExecutor() as executor:
-            response = self.process_query(user_message)
-            self.chat_display.undo()
-            self.log_signal.emit(f"LLM generated response: '{response}'")
-            self.show_message(response, is_user=False)
+        response = self.process_query(user_message)
+        self.chat_display.undo()
+        self.log_signal.emit(f"LLM generated response: '{response}'")
+        self.show_message(response, is_user=False)
 
         self.set_chat_enabled(True)
 
     def process_query(self, user_message):
         self.log("BACKGROUND: Retrieving files from Pathway...")
         ret_res = retrieve(user_message, k=K)
-        list_of_paths = [os.path.join(PATHWAY_DIR, ret["metadata"]["path"]) for ret in ret_res]
-        
+
         self.log("BACKGROUND: Generating response from LLM...")
-        with ThreadPoolExecutor() as executor:
-            future = executor.submit(self.process_llm_response, user_message, list_of_paths, API)
-            ai_response = future.result()
+        list_of_paths = [os.path.join(PATHWAY_DIR, ret["metadata"]["path"]) for ret in ret_res]
+        formatted_chat_history = format_history(chat_history)
+        ai_response = get_user_response(user_message, formatted_chat_history, self.latest_ss, list_of_paths, API)
         
-        self.chat_history.append({'user': user_message, 'response': ai_response})
+        add_to_chat_history(user_message, ai_response)
         return ai_response
 
     def set_chat_enabled(self, enabled: bool):
@@ -207,24 +203,40 @@ class ChatAndTrackerWindow(QWidget):
         if pressed:
             try:
                 active_window = gw.getActiveWindow()
+                if not active_window:
+                    self.log_signal.emit("No active window detected")
+                    return
+
+                rel_x = x - active_window.left
+                rel_y = y - active_window.top
+                
+                self.log_signal.emit(f"Click detected - Window HWND: {active_window._hWnd}, Target HWND: {self.target_hwnd}")
+                
+                if active_window._hWnd != self.target_hwnd:
+                    self.log_signal.emit("Click ignored - not in target window")
+                    return
+                    
+                if not click_in_bounds(rel_x, rel_y, active_window):
+                    self.log_signal.emit("Click ignored - out of bounds")
+                    return
+
+                self.log_signal.emit(f"Processing click at ({rel_x}, {rel_y})")
+                ss_before, ss_after = self.click_and_changed_screenshot(active_window, rel_x, rel_y)
+                self.log_signal.emit(f"Screenshots saved at: {ss_before} and {ss_after}")
+
+                caption, caption_path = self.generate_caption(ss_before, ss_after)
+                self.log(f"Caption generated: '{caption[:30]}...'")
+                self.log(f"New file created for caption: {caption_path}")
+                
             except Exception as e:
-                self.log_signal.emit(f"Error checking active window: {e}")
-                return
-            
-            rel_x = x - active_window.left
-            rel_y = y - active_window.top
+                self.log_signal.emit(f"Error in click handler: {str(e)}")
+                import traceback
+                self.log_signal.emit(traceback.format_exc())
 
-            if not (
-                active_window and
-                active_window._hWnd == self.target_hwnd and
-                click_in_bounds(rel_x, rel_y, active_window)
-            ): return
-
-            self.log_signal.emit(f"Click detected at ({rel_x}, {rel_y})")
-            ss_before, ss_after = self.click_and_changed_screenshot(active_window, rel_x, rel_y)
-            self.log_signal.emit(f"Screenshots saved at: {ss_before} and {ss_after}")
-
-            # SEND TO RAG MODEL HERE
+    def generate_caption(self, before_path, after_path):
+        caption = screenshot_to_text([before_path, after_path], API)
+        file_path = save_text_to_file(caption, LIVE_DIR)
+        return caption, file_path
 
     # Screenshot Methods
     def take_screenshot(self, window, filepath=None):
@@ -243,13 +255,17 @@ class ChatAndTrackerWindow(QWidget):
         return filepath
     
     def click_and_changed_screenshot(self, window, click_x, click_y):
-        before_path = self.take_screenshot(window)
-        self.process_click_screenshot(before_path, click_x, click_y)
-
-        time.sleep(SCREENSHOT_TIMER_SEC)
-        after_path = self.take_screenshot(window)
-        self.latest_ss = after_path
-        return before_path, after_path
+        try:
+            before_path = self.take_screenshot(window)
+            self.process_click_screenshot(before_path, click_x, click_y)
+            self.log_signal.emit("Waiting for changes...")
+            time.sleep(SCREENSHOT_TIMER_SEC)
+            after_path = self.take_screenshot(window)
+            self.latest_ss = after_path
+            return before_path, after_path
+        except Exception as e:
+            self.log_signal.emit(f"Error in screenshot capture: {str(e)}")
+            raise
 
     def process_click_screenshot(self, screenshot_path, click_x, click_y):
         with Image.open(screenshot_path) as img:
@@ -265,13 +281,22 @@ class ChatAndTrackerWindow(QWidget):
 
     # Click Listeners
     def run_click_listener(self):
+        self.log_signal.emit("Starting click listener...")
         with mouse.Listener(on_click=self.on_click) as listener:
             self.mouse_listener = listener
+            self.log_signal.emit("Click listener is active")
             listener.join()
+            self.log_signal.emit("Click listener stopped")
     
     def start_click_listener(self):
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.log_signal.emit("Click listener already running")
+            return
+            
+        self.log_signal.emit("Initializing click listener...")
         self.listener_thread = threading.Thread(target=self.run_click_listener, daemon=True)
         self.listener_thread.start()
+        self.log_signal.emit("Click listener thread started")
 
     def closeEvent(self, event):
         if self.mouse_listener:
