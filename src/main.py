@@ -2,6 +2,7 @@ from src.db.utils import save_text_to_file
 from src.db.pathway_pipeline import auto_update_vec_db_async
 from src.db.query import query_vector_db
 from src.agent.agent_utils import screenshot_to_text, get_user_response
+from src.client_functions.endpoints import answer, summarize, retrieve, list_documents, statistics, health_check, search_documents, ask_with_context
 import os
 from dotenv import load_dotenv
 
@@ -9,7 +10,9 @@ PATH_TO_TEXTS_ON_CLICK = "captured_texts.txt"
 
 load_dotenv()
 
-API = os.getenv('GEMINI_KEY')
+API = os.getenv('GEMINI_API_KEY')
+
+
 
 if __name__ == "__main__":
     # Update Vector database in background asynchrounously whenever new information available
