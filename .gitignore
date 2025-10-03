@@ -2,3 +2,5 @@ __pycache__
 Cache
 .env
 *.png
+pathway/data*
+game_screenshots
