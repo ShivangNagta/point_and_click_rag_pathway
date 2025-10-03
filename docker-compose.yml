@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: pathway
+    ports:
+      - "${PATHWAY_PORT:-8000}:${PATHWAY_PORT:-8000}"
+    environment:
+      PATHWAY_PORT: "${PATHWAY_PORT:-8000}"
+      PATHWAY_LICENSE_KEY: $PATHWAY_LICENSE_KEY
+    volumes:
+      - ./pathway/data:/app/data
+      - ./pathway/Cache:/app/Cache
