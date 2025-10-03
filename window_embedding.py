@@ -18,7 +18,6 @@ cd reinforced_game_rag
 conda activate pathway
 python window_embedding.py
 '''
-
 def screenshot_window(active_window):
     bbox = (active_window.left, active_window.top, active_window.right, active_window.bottom)
     screenshot = ImageGrab.grab(bbox=bbox)
