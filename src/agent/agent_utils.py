@@ -1,3 +1,4 @@
+from datetime import datetime
 from google import genai
 from google.genai import types
 
@@ -7,29 +8,36 @@ def screenshot_to_text(images_list, api_key):
            Assuming only 2 images in images_list [before_click, after_click]
     Output: Detailed textual description of changes and extracted clues
     """
-    system_prompt = """
-    You are an AI assistant specialized in analyzing game screenshots. 
+    event_time = datetime.now()
+    formatted_time = event_time.strftime('%Y-%m-%d %H:%M:%S')
+    system_prompt = f"""
+    You are an AI assistant specialized in analyzing pairs of screenshots. 
+    The event you are analyzing occurred at exactly: {formatted_time}.
     The user will provide two images: 
-      - Image 1: before a mouse click
-      - Image 2: after the mouse click
+    - Image 1: before a mouse click
+    - Image 2: after the mouse click
 
     Your tasks:
-    1. Carefully compare the two images and describe **all meaningful differences** caused by the click. 
-       - Focus on top messages, dialog boxes, or notifications that might have changed.
-       - Highlight any new objects, icons, or environmental changes.
-    2. Provide a **detailed semantic description** of the scene:
-       - Characters, items, symbols, numbers, text, or UI changes.
-       - Relevant background details or environment features that could be clues.
-    3. Track the **inventory**: 
-       - Note what is visible in the inventory before and after.
-       - Mention if something disappeared, appeared, or changed.
-    4. Output should be structured to help solve puzzles, not just describe pixels.
+    1. **Provide a detailed semantic description of the scene**:  
+    - Describe what is visible: objects, symbols, patterns, shapes, text, numbers, icons, or decorative elements.  
+    - Note positioning, colors, arrangements, or connections that could be significant.  
+    - Treat both large items (panels, windows, dialogs) and small details (wall markings, small icons, tiny objects) as potentially meaningful.
 
-    Format your response in this way:
-    - **Observed Changes:** (list differences between before and after)  
-    - **Clue Candidates:** (items, text, hints that could be puzzle-relevant)  
-    - **Inventory State:** (items before vs after, possible usefulness)  
-    - **Possible Next Step:** (brief hint on how this change might help the player progress)
+    2. **Compare the two images carefully** and describe all meaningful differences.  
+    - Include both major changes (UI panels, inventory, new objects) and subtle changes (small objects, decorations, shapes, icons, symbols, highlights, color shifts, patterns).  
+    - Mention even minor variations if no obvious change is seen.
+
+
+    3. **Clue or relevance analysis**:  
+    - For each described element, suggest how or why it might be relevant to the application’s context (e.g., puzzle-solving, navigation, progress tracking).  
+    - Do not assume the application type; keep the explanation general.
+
+    Format your response, making sure to include the event time:
+    - *Event Time:* {formatted_time}
+    - *Observed Change:* (A concise, one-sentence summary of the click's result.)
+    - *Detailed Description:* (A thorough list of all visual differences.)
+    - *State Elements & Notable Objects:* (Description of important persistent items.)
+    - *Inferred Action:* (A brief interpretation of the user's action.)
     """
 
     image_before_path = images_list[0]
@@ -71,10 +79,16 @@ def get_user_response(user_query, relevant_chat, current_screenshot, chunks, api
 
     # Stronger system prompt
     system_prompt = """
-    You are an expert AI game assistant helping the user solve puzzles inside a game. 
+    You are an expert AI assistant. Your goal is to help a user by analyzing the state of their application.
+    You will be given the following:
+    1.  The user's question.
+    2.  A screenshot of the application's current state.
+    3.  A chronological history of the user's past actions and the results.
+
     Your job:
     - Look carefully at the provided screenshot.
-    - Use the retrieved reference text (chunks) as factual game knowledge.
+    - Use the retrieved reference text (chunks) as factual knowledge.
+    - If something has been seen/interacted before which is relevant, do tell what has been seen/interacted before (with reference of small part of chunk).
     - Consider the ongoing conversation history for context.
     - Always give clear, step-by-step reasoning or hints, not just answers.
     - If the answer is uncertain, state assumptions explicitly instead of guessing wildly.
@@ -98,8 +112,8 @@ def get_user_response(user_query, relevant_chat, current_screenshot, chunks, api
     Retrieved knowledge:
     {info}
 
-    Now: Based on the screenshot, chat history, and retrieved knowledge, 
-    provide the most useful guidance for the user to progress in solving the puzzle.
+    Now: Based on the screenshot, chat history, and temporal retrieved knowledge, 
+    provide the most useful guidance and make the most of use of previous contexts, for the user to progress in solving the puzzle.
     """
 
     client = genai.Client(api_key=api_key)

@@ -312,7 +312,7 @@ class GameStreamApp(QMainWindow):
         self.log(f"BACKGROUND: Retrieved top {K} Files.")
         
         list_of_paths = [os.path.join(PATHWAY_DIR, ret["metadata"]["path"]) for ret in ret_res]
-        
+        self.log(f"Retrieves: {list_of_paths}")
         formatted_chat_history = format_history(chat_history)
         
         self.log("BACKGROUND: Generating response from LLM...")
